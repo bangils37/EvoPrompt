@@ -8,7 +8,7 @@ import openai
 import backoff
 from termcolor import colored
 import time
-from utils import read_yaml_file, batchify
+from BBH.utils import read_yaml_file, batchify
 
 
 def extract_seconds(text, retried=5):

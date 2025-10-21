@@ -1,11 +1,11 @@
 import os
 import json
 import random
-from utils import set_seed
-from args import parse_args
-from llm_client import llm_init
-from run_bbh import eval_task
-from utils import read_lines, setup_log
+from BBH.utils import set_seed
+from BBH.args import parse_args
+from BBH.llm_client import llm_init
+from BBH.run_bbh import eval_task
+from BBH.utils import read_lines, setup_log
 
 if __name__ == "__main__":
     args = parse_args()

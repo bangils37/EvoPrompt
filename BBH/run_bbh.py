@@ -5,8 +5,8 @@ import json
 import numpy as np
 from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
-from utils import extract_ans, batchify
-from llm_client import turbo_query, davinci_query
+from BBH.utils import extract_ans, batchify
+from BBH.llm_client import turbo_query, davinci_query
 
 MULTIPLE_CHOICE_TASKS = [
         'temporal_sequences', 'disambiguation_qa', 'date_understanding', 'tracking_shuffled_objects_three_objects', 'penguins_in_a_table', 

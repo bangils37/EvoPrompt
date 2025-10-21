@@ -4,10 +4,10 @@ from tqdm import tqdm
 import random
 import numpy as np
 import functools
-from run_bbh import eval_task
+from BBH.run_bbh import eval_task
 from data.templates import *
-from llm_client import *
-from utils import *
+from BBH.llm_client import *
+from BBH.utils import *
 
 
 def evolution(args, llm_config, client):

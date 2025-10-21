@@ -5,16 +5,16 @@ import heapq
 import random
 from tqdm import tqdm
 
-from utils import setup_log, k_init_pop
-from utils import (
+from BBH.utils import setup_log, k_init_pop
+from BBH.utils import (
     read_lines,
     get_final_prompt,
     extract_numbers,
 )
-from llm_client import paraphrase, llm_query
+from BBH.llm_client import paraphrase, llm_query
 from data.template_ga import templates_2
 from data.templates import *
-from run_bbh import eval_task
+from BBH.run_bbh import eval_task
 import functools
 
 

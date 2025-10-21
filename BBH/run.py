@@ -1,6 +1,6 @@
-from utils import  set_seed
-from args import parse_args
-from llm_client import llm_init
+from BBH.utils import  set_seed
+from BBH.args import parse_args
+from BBH.llm_client import llm_init
 
 
 if __name__ == "__main__":
