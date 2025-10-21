@@ -1,1 +1,6 @@
 *.simp.* linguist-language=text
+# File này (.gitattributes) dùng để chỉ định metadata cho các file trong Git repo,
+# ví dụ: cách xử lý dòng mới (CRLF/LF), ngôn ngữ lập trình để GitHub hiển thị syntax,
+# hoặc merge strategy. Dòng "*.simp.* linguist-language=text" nói với GitHub
+# coi mọi file có phần mở rộng *.simp.* là văn bản thuần túy (text) thay vì
+# một ngôn ngữ lập trình cụ thể.
