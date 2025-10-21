@@ -8,6 +8,7 @@ import openai
 from termcolor import colored
 import time
 from utils import read_yaml_file, remove_punctuation, batchify
+import google.generativeai as genai
 
 def extract_seconds(text, retried=5):
     words = text.split()
@@ -56,6 +57,16 @@ def llm_init(auth_file="../auth.yaml", llm_type='davinci', setting="default"):
     except:
         pass
     openai.api_key = auth["api_key"]
+    if 'api_type' in auth and auth['api_type'] == 'azure':
+        openai.api_base = auth["api_base"]
+        openai.api_version = auth["api_version"]
+        openai.api_type = auth['api_type']
+    elif 'api_type' in auth and auth['api_type'] == 'gemini':
+        genai.configure(api_key=auth["api_key"])
+    else:
+        openai.api_base = "https://api.openai.com/v1"
+        openai.api_version = None
+        openai.api_type = None
     return auth
 
 
@@ -83,6 +94,21 @@ def llm_query(data, client, type, task, **config):
                         second = extract_seconds(error, retried)
                         retried = retried + 1
                         time.sleep(second)
+            elif "gemini" in type:
+                response = []
+                model = genai.GenerativeModel(config["model"])
+                for data in tqdm(batch):
+                    while True:
+                        try:
+                            result = model.generate_content(data)
+                            response.append(result.text)
+                            break
+                        except Exception as e:
+                            error = str(e)
+                            print("retring...", error)
+                            second = extract_seconds(error, retried)
+                            retried = retried + 1
+                            time.sleep(second)
             else:
                 response = []
                 for data in tqdm(batch):
@@ -100,7 +126,6 @@ def llm_query(data, client, type, task, **config):
                             second = extract_seconds(error, retried)
                             retried = retried + 1
                             time.sleep(second)
-
             # print(response)
             if task:
                 results = [str(r).strip().split("\n\n")[0] for r in response]
@@ -120,6 +145,11 @@ def llm_query(data, client, type, task, **config):
                     request_data = form_request(data, type, **config)
                     response = openai.ChatCompletion.create(**request_data)
                     result = response["choices"][0]["message"]["content"]
+                    break
+                elif "gemini" in type:
+                    model = genai.GenerativeModel(config["model"])
+                    response = model.generate_content(data)
+                    result = response.text
                     break
                 else:
                     request_data = form_request(data, type=type, **config)
@@ -165,7 +195,7 @@ def llm_cls(dataset, client=None, type=None, **config):
 
 if __name__ == "__main__":
     llm_client = None
-    llm_type = 'turbo'
+    llm_type = 'gemini'
     start = time.time()
     data =  ["""Q: Tom bought a skateboard for $ 9.46 , and spent $ 9.56 on marbles . Tom 
 also spent $ 14.50 on shorts . In total , how much did Tom spend on toys ?                                                 
