@@ -10,14 +10,14 @@ if __name__ == "__main__":
     client = None
     llm_config = llm_init(f"./auth.yaml", args.llm_type, args.setting)
     if args.evo_mode == 'de':
-        from evoluter import DEEvoluter
+        from BBH.evoluter import DEEvoluter
         evoluter = DEEvoluter(args, llm_config, client)
         evoluter.evolute()
     elif args.evo_mode == 'ga':
-        from evoluter import GAEvoluter
+        from BBH.evoluter import GAEvoluter
         evoluter = GAEvoluter(args, llm_config, client)
         evoluter.evolute()
     elif args.evo_mode == 'ape':
-        from evoluter import ParaEvoluter
+        from BBH.evoluter import ParaEvoluter
         evoluter = ParaEvoluter(args, llm_config, client)
         evoluter.evolute()

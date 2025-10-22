@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument('--mode', type=str)
     parser.add_argument('--setting', type=str, default='default')
     parser.add_argument("--ga_mode", type=str, default="topk", help="update strategy for GA")
-    parser.add_argument('--content', type=str, default='')
+    # parser.add_argument('--content', type=str, default='')
     parser.add_argument('--ckpt_pop', type=str, default=None)
     parser.add_argument('--demon', type=int, default=1, help='few-shot or zero-shot', choices=[0,1])
     parser.add_argument(

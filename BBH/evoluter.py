@@ -30,7 +30,7 @@ class Evoluter:
         self.client, self.llm_config = client, llm_config
         self.public_out_path = args.output
         self.task = args.task
-        self.task_prompt = open("lib_prompt/%s.txt" % self.task, "r").read()
+        self.task_prompt = open("BBH/lib_prompt/%s.txt" % self.task, "r").read()
 
         self.logger = logger = setup_log(
             os.path.join(self.public_out_path, f"evol.log")
@@ -41,11 +41,11 @@ class Evoluter:
         self.args = args
 
         self.out_path = os.path.join(self.public_out_path, f"dev_result.txt")
-        self.task_data = json.load(open("data/%s.json" % args.task))["examples"]
+        self.task_data = json.load(open("BBH/data/%s.json" % args.task))["examples"]
         self.dev_data = random.sample(self.task_data, args.sample_num)
         self.test_data = [i for i in self.task_data if i not in self.dev_data]
 
-        model = "turbo" if "turbo" in args.llm_type else "davinci"
+        model = args.llm_type
 
         self.eval_func = functools.partial(
             eval_task,
@@ -114,7 +114,7 @@ class Evoluter:
                 prompt_path = (
                     f"auto_prompts/{args.task}.txt"
                     if args.initial == "ape"
-                    else "prompts.txt"
+                    else "BBH/prompts.txt"
                 )
                 pop = read_lines(prompt_path)
                 logger.info(

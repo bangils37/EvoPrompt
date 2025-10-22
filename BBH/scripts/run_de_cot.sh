@@ -6,7 +6,7 @@ set -ex
 BUDGET=10
 POPSIZE=10
 template=v1
-llm=davinci
+llm=gpt4o
 initial=cot
 initial_mode=para_topk
 
