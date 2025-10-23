@@ -114,6 +114,7 @@ def llm_query(data, client, type, task, **config):
     """
     hypos = []
     api_type = config.get("api_type", "openai")
+    print(f"llm_query called with: type={type}, api_type_from_config={api_type}")
 
     # Gemini branch
     if api_type == "gemini":
@@ -137,66 +138,67 @@ def llm_query(data, client, type, task, **config):
                 hypos = ""
         return hypos
 
-    # OpenAI / Azure branch
-    model_name = "davinci" if "davinci" in type else "turbo"
-    if isinstance(data, list):
-        batch_data = batchify(data, 20)
-        for batch in tqdm(batch_data):
-            retried = 0
-            request_data = form_request(batch, model_name, **config)
-            if "davinci" in type:
-                while True:
-                    try:
-                        response = openai.Completion.create(**request_data)
-                        response = [r["text"] for r in response["choices"]]
-                        break
-                    except Exception as e:
-                        print("retring...", e)
-                        second = extract_seconds(str(e), retried)
-                        retried += 1
-                        time.sleep(second)
-            else:
-                response = []
-                for d in batch:
-                    request_data = form_request(d, type, **config)
+    else:
+        # OpenAI / Azure branch
+        model_name = "davinci" if "davinci" in type else "turbo"
+        if isinstance(data, list):
+            batch_data = batchify(data, 20)
+            for batch in tqdm(batch_data):
+                retried = 0
+                request_data = form_request(batch, model_name, **config)
+                if "davinci" in type:
                     while True:
                         try:
-                            result = openai.ChatCompletion.create(**request_data)
-                            result = result["choices"][0]["message"]["content"]
-                            response.append(result)
+                            response = openai.Completion.create(**request_data)
+                            response = [r["text"] for r in response["choices"]]
                             break
                         except Exception as e:
                             print("retring...", e)
                             second = extract_seconds(str(e), retried)
                             retried += 1
                             time.sleep(second)
+                else:
+                    response = []
+                    for d in batch:
+                        request_data = form_request(d, type, **config)
+                        while True:
+                            try:
+                                result = openai.ChatCompletion.create(**request_data)
+                                result = result["choices"][0]["message"]["content"]
+                                response.append(result)
+                                break
+                            except Exception as e:
+                                print("retring...", e)
+                                second = extract_seconds(str(e), retried)
+                                retried += 1
+                                time.sleep(second)
 
             results = [str(r).strip().split("\n\n")[0] if task else str(r).strip() for r in response]
             hypos.extend(results)
-    else:
-        retried = 0
-        while True:
-            try:
-                if "turbo" in type or "gpt4" in type:
-                    request_data = form_request(data, type, **config)
-                    response = openai.ChatCompletion.create(**request_data)
-                    result = response["choices"][0]["message"]["content"]
+        else:
+            retried = 0
+            while True:
+                try:
+                    if "turbo" in type or "gpt4" in type:
+                        request_data = form_request(data, type, **config)
+                        response = openai.ChatCompletion.create(**request_data)
+                        result = response["choices"][0]["message"]["content"]
+                        break
+                    else:
+                        request_data = form_request(data, type=type, **config)
+                        response = openai.Completion.create(**request_data)["choices"][0]["text"]
+                        result = response.strip()
                     break
-                else:
-                    request_data = form_request(data, type=type, **config)
-                    response = openai.Completion.create(**request_data)["choices"][0]["text"]
-                    result = response.strip()
-                break
-            except Exception as e:
-                print("retring...", e)
-                second = extract_seconds(str(e), retried)
-                retried += 1
-                time.sleep(second)
-        if task:
-            result = result.split("\n\n")[0]
-        hypos = result
+                except Exception as e:
+                    print("retring...", e)
+                    second = extract_seconds(str(e), retried)
+                    retried += 1
+                    time.sleep(second)
+            if task:
+                result = result.split("\n\n")[0]
+            hypos = result
 
-    return hypos
+        return hypos
 
 
 def paraphrase(sentence, client, type, **kwargs):

@@ -6,7 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
 from BBH.utils import extract_ans, batchify
-from BBH.llm_client import turbo_query, davinci_query
+from BBH.llm_client import turbo_query, davinci_query, llm_query
 
 MULTIPLE_CHOICE_TASKS = [
         'temporal_sequences', 'disambiguation_qa', 'date_understanding', 'tracking_shuffled_objects_three_objects', 'penguins_in_a_table', 
@@ -60,8 +60,7 @@ def eval_task(task, task_prompt,cot_prompt,eval_data, client, model_index,logger
             q = questions[i]
             a = answers[i]
 
-        # for prompt_q,q,a in tqdm(zip(prompt_qs, questions,answers)):
-            ans_model = turbo_query(prompt_q, temperature=0,**kwargs)
+            ans_model = llm_query(prompt_q, client, model_index, task, temperature=0,**kwargs)
             ans_ = extract_ans(ans_model, mode)
             if print_first:
                 logger.info('First prompt: ')
@@ -81,7 +80,7 @@ def eval_task(task, task_prompt,cot_prompt,eval_data, client, model_index,logger
                 logger.info('First prompt: ')
                 logger.info(batch[0])
                 print_first = False
-            response = davinci_query(batch, client,temperature=0,**kwargs)
+            response = llm_query(batch, client, model_index, task, temperature=0,**kwargs)
             responses.extend(response)
         for ans, q, a in zip(responses, questions, answers):
             ans_ = extract_ans(ans, mode)
