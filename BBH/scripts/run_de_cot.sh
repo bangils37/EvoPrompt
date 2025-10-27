@@ -6,12 +6,14 @@ set -ex
 BUDGET=10
 POPSIZE=10
 template=v1
-llm=gpt4o
+llm=gemini
 initial=cot
 initial_mode=para_topk
 
-# for task in dyck_languages  word_sorting  sports_understanding object_counting  formal_fallacies  causal_judgement  web_of_lies temporal_sequences disambiguation_qa tracking_shuffled_objects_three_objects penguins_in_a_table geometric_shapes snarks ruin_names tracking_shuffled_objects_seven_objects tracking_shuffled_objects_five_objects logical_deduction_three_objects hyperbaton logical_deduction_five_objects logical_deduction_seven_objects movie_recommendation salient_translation_error_detection reasoning_about_colored_objects
-for task in date_understanding
+# ⚡ Move to project root (EvoPrompt)
+cd "$(dirname "$(realpath "$0")")/../.."
+
+for task in date_understanding dyck_languages word_sorting sports_understanding object_counting formal_fallacies causal_judgement web_of_lies temporal_sequences disambiguation_qa tracking_shuffled_objects_three_objects penguins_in_a_table geometric_shapes snarks ruin_names tracking_shuffled_objects_seven_objects tracking_shuffled_objects_five_objects logical_deduction_three_objects hyperbaton logical_deduction_five_objects logical_deduction_seven_objects movie_recommendation salient_translation_error_detection reasoning_about_colored_objects multistep_arithmetic_two navigate boolean_expressions
 do
 for SIZE in 10
 do
@@ -22,7 +24,7 @@ do
 mkdir -p $OUT_PATH/seed${seed}
 cache_path=cache/$task/seed$seed
 mkdir -p $cache_path
-python run.py \
+python -m BBH.run \
     --seed $seed \
     --task $task \
     --batch-size 20 \

@@ -55,9 +55,11 @@ def llm_init(auth_file=os.path.join(current_dir, '../auth.yaml'), llm_type='davi
     api_type = auth.get("api_type", "openai")
 
     if api_type == "gemini":
-        if genai is None:
-            raise ImportError("Please install google-generativeai (pip install google-generativeai)")
-        genai.configure(api_key=auth["api_key"])
+        # Nếu sử dụng key manager, không cần configure genai
+        if not auth.get("use_key_manager", False):
+            if genai is None:
+                raise ImportError("Please install google-generativeai (pip install google-generativeai)")
+            genai.configure(api_key=auth["api_key"])
     else:
         try:
             openai.api_type = auth.get("api_type", "open_ai")
@@ -110,7 +112,7 @@ def davinci_query(data, client, **kwargs):
 
 def llm_query(data, client, type, task, **config):
     """
-    Generic LLM query — supports OpenAI / Azure / Gemini
+    Generic LLM query — supports OpenAI / Azure / Gemini / Gemini Key Manager
     """
     hypos = []
     api_type = config.get("api_type", "openai")
@@ -118,24 +120,76 @@ def llm_query(data, client, type, task, **config):
 
     # Gemini branch
     if api_type == "gemini":
-        model_name = config.get("model", "gemini-2.0-flash")
-        model = genai.GenerativeModel(model_name)
-        if isinstance(data, list):
-            for d in tqdm(data):
+        use_key_manager = config.get("use_key_manager", False)
+        
+        if use_key_manager:
+            # Sử dụng Key Manager endpoint
+            key_manager_url = config.get("api_base", "http://localhost:7749")
+            endpoint = f"{key_manager_url}/generate"
+            
+            if isinstance(data, list):
+                for d in tqdm(data):
+                    try:
+                        response = requests.post(
+                            endpoint,
+                            json={"prompt": d},
+                            headers={"Content-Type": "application/json"}
+                        )
+                        if response.status_code == 200:
+                            result = response.json()
+                            text = result["candidates"][0]["content"]["parts"][0]["text"]
+                            hypos.append(text.strip())
+                        elif response.status_code == 429:
+                            print("Key Manager error: All keys rate limited")
+                            time.sleep(60)  # Chờ 1 phút trước khi retry
+                            hypos.append("")
+                        else:
+                            print(f"Key Manager error: {response.status_code} - {response.text}")
+                            hypos.append("")
+                    except Exception as e:
+                        print("Key Manager exception:", e)
+                        time.sleep(5)
+                        hypos.append("")
+            else:
                 try:
-                    resp = model.generate_content(d)
-                    hypos.append(resp.text.strip())
+                    response = requests.post(
+                        endpoint,
+                        json={"prompt": data},
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        hypos = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    elif response.status_code == 429:
+                        print("Key Manager error: All keys rate limited")
+                        time.sleep(60)
+                        hypos = ""
+                    else:
+                        print(f"Key Manager error: {response.status_code} - {response.text}")
+                        hypos = ""
+                except Exception as e:
+                    print("Key Manager exception:", e)
+                    hypos = ""
+        else:
+            # Sử dụng Gemini API trực tiếp (code cũ)
+            model_name = config.get("model", "gemini-2.0-flash")
+            model = genai.GenerativeModel(model_name)
+            if isinstance(data, list):
+                for d in tqdm(data):
+                    try:
+                        resp = model.generate_content(d)
+                        hypos.append(resp.text.strip())
+                    except Exception as e:
+                        print("Gemini error:", e)
+                        time.sleep(5)
+                        hypos.append("")
+            else:
+                try:
+                    resp = model.generate_content(data)
+                    hypos = resp.text.strip()
                 except Exception as e:
                     print("Gemini error:", e)
-                    time.sleep(5)
-                    hypos.append("")
-        else:
-            try:
-                resp = model.generate_content(data)
-                hypos = resp.text.strip()
-            except Exception as e:
-                print("Gemini error:", e)
-                hypos = ""
+                    hypos = ""
         return hypos
 
     else:
