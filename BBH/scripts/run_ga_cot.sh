@@ -10,7 +10,8 @@ initial_mode=para_topk
 # ⚡ Move to project root (EvoPrompt)
 cd "$(dirname "$(realpath "$0")")/../.."
 
-for task in dyck_languages multistep_arithmetic_two logical_deduction_seven_objects formal_fallacies word_sorting salient_translation_error_detection geometric_shapes logical_deduction_five_objects causal_judgement tracking_shuffled_objects_three_objects ruin_names disambiguation_qa
+# dyck_languages multistep_arithmetic_two logical_deduction_seven_objects formal_fallacies word_sorting salient_translation_error_detection geometric_shapes logical_deduction_five_objects causal_judgement tracking_shuffled_objects_three_objects
+for task in logical_deduction_seven_objects formal_fallacies word_sorting salient_translation_error_detection geometric_shapes logical_deduction_five_objects causal_judgement tracking_shuffled_objects_three_objects
 do
     for SIZE in 10
     do

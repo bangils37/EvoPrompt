@@ -1,12 +1,8 @@
 import json
 import os
-import atexit
 import requests
 import sys
 from tqdm import tqdm
-import openai
-import backoff
-from termcolor import colored
 import time
 from BBH.utils import read_yaml_file, batchify
 
@@ -17,42 +13,36 @@ except ImportError:
     genai = None
 
 
-def extract_seconds(text, retried=5):
-    words = text.split()
-    for i, word in enumerate(words):
-        if "second" in word:
-            return int(words[i - 1])
-    return 60
 
 
-def form_request(data, type, **kwargs):
-    if "davinci" in type:
-        request_data = {
-            "prompt": data,
-            "max_tokens": 1000,
-            "top_p": 1,
-            "n": 1,
-            "frequency_penalty": 0,
-            "presence_penalty": 0,
-            "stream": False,
-            "logprobs": None,
-            "stop": None,
-            **kwargs,
-        }
-    else:
-        assert isinstance(data, str)
-        messages_list = [
-            {"role": "system", "content": "Follow the given examples and answer the question."},
-            {"role": "user", "content": data},
+def form_request(data, **kwargs):
+    """
+    Form Gemini API request in the standard format
+    """
+    if isinstance(data, str):
+        contents = [
+            {
+                "parts": [
+                    {
+                        "text": data
+                    }
+                ]
+            }
         ]
-        request_data = {"messages": messages_list, **kwargs}
+    else:
+        raise ValueError("Data must be a string")
+    
+    request_data = {
+        "contents": contents,
+        **kwargs
+    }
     return request_data
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-def llm_init(auth_file=os.path.join(current_dir, '../auth.yaml'), llm_type='davinci', setting='default'):
+def llm_init(auth_file=os.path.join(current_dir, '../auth.yaml'), llm_type='gemini', setting='default'):
     auth = read_yaml_file(auth_file)[llm_type][setting]
-    api_type = auth.get("api_type", "openai")
+    api_type = auth.get("api_type", "gemini")
 
     if api_type == "gemini":
         # Nếu sử dụng key manager, không cần configure genai
@@ -60,199 +50,162 @@ def llm_init(auth_file=os.path.join(current_dir, '../auth.yaml'), llm_type='davi
             if genai is None:
                 raise ImportError("Please install google-generativeai (pip install google-generativeai)")
             genai.configure(api_key=auth["api_key"])
-    else:
-        try:
-            openai.api_type = auth.get("api_type", "open_ai")
-            openai.api_base = auth.get("api_base", None)
-            openai.api_version = auth.get("api_version", None)
-        except Exception:
-            pass
-        openai.api_key = auth["api_key"]
 
     return auth
 
 
-def turbo_query(request_data, **kwargs):
-    while True:
-        retried = 0
-        try:
-            response = openai.ChatCompletion.create(
-                messages=[
-                    {"role": "system", "content": "Follow the given examples and answer the question."},
-                    {"role": "user", "content": request_data},
-                ],
-                **kwargs)
-            break
-        except Exception as e:
-            error = str(e)
-            print("retring...", error)
-            second = extract_seconds(error, retried)
-            retried += 1
-            time.sleep(second)
-
-    return response['choices'][0]['message']['content']
-
-
-def davinci_query(data, client, **kwargs):
-    retried = 0
-    request_data = {"prompt": data, "max_tokens": 1000, "temperature": 0, **kwargs}
-    while True:
-        try:
-            response = openai.Completion.create(**request_data)
-            response = [r["text"] for r in response["choices"]]
-            break
-        except Exception as e:
-            error = str(e)
-            print("retring...", error)
-            second = extract_seconds(error, retried)
-            retried += 1
-            time.sleep(second)
-    return response
 
 
 def llm_query(data, client, type, task, **config):
     """
-    Generic LLM query — supports OpenAI / Azure / Gemini / Gemini Key Manager
+    Gemini-only LLM query with full Gemini API format support
+    Supports both direct Gemini API and Key Manager endpoint
     """
-    hypos = []
-    api_type = config.get("api_type", "openai")
-    print(f"llm_query called with: type={type}, api_type_from_config={api_type}")
-
-    # Gemini branch
-    if api_type == "gemini":
-        use_key_manager = config.get("use_key_manager", False)
-        
-        if use_key_manager:
-            # Sử dụng Key Manager endpoint
-            key_manager_url = config.get("api_base", "http://localhost:7749")
-            endpoint = f"{key_manager_url}/generate"
-            
-            if isinstance(data, list):
-                for d in tqdm(data):
-                    try:
-                        response = requests.post(
-                            endpoint,
-                            json={"prompt": d},
-                            headers={"Content-Type": "application/json"}
-                        )
-                        if response.status_code == 200:
-                            result = response.json()
-                            text = result["candidates"][0]["content"]["parts"][0]["text"]
-                            hypos.append(text.strip())
-                        elif response.status_code == 429:
-                            print("Key Manager error: All keys rate limited")
-                            time.sleep(60)  # Chờ 1 phút trước khi retry
-                            hypos.append("")
-                        else:
-                            print(f"Key Manager error: {response.status_code} - {response.text}")
-                            hypos.append("")
-                    except Exception as e:
-                        print("Key Manager exception:", e)
-                        time.sleep(5)
-                        hypos.append("")
-            else:
-                try:
-                    response = requests.post(
-                        endpoint,
-                        json={"prompt": data},
-                        headers={"Content-Type": "application/json"}
-                    )
-                    if response.status_code == 200:
-                        result = response.json()
-                        hypos = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    elif response.status_code == 429:
-                        print("Key Manager error: All keys rate limited")
-                        time.sleep(60)
-                        hypos = ""
-                    else:
-                        print(f"Key Manager error: {response.status_code} - {response.text}")
-                        hypos = ""
-                except Exception as e:
-                    print("Key Manager exception:", e)
-                    hypos = ""
-        else:
-            # Sử dụng Gemini API trực tiếp (code cũ)
-            model_name = config.get("model", "gemini-2.0-flash")
-            model = genai.GenerativeModel(model_name)
-            if isinstance(data, list):
-                for d in tqdm(data):
-                    try:
-                        resp = model.generate_content(d)
-                        hypos.append(resp.text.strip())
-                    except Exception as e:
-                        print("Gemini error:", e)
-                        time.sleep(5)
-                        hypos.append("")
-            else:
-                try:
-                    resp = model.generate_content(data)
-                    hypos = resp.text.strip()
-                except Exception as e:
-                    print("Gemini error:", e)
-                    hypos = ""
-        return hypos
-
+    api_type = config.get("api_type", "gemini")
+    
+    if api_type != "gemini":
+        raise ValueError("Only Gemini API is supported. Please set api_type to 'gemini' in auth.yaml")
+    
+    use_key_manager = config.get("use_key_manager", False)
+    
+    if use_key_manager:
+        return _query_key_manager(data, config, task)
     else:
-        # OpenAI / Azure branch
-        model_name = "davinci" if "davinci" in type else "turbo"
-        if isinstance(data, list):
-            batch_data = batchify(data, 20)
-            for batch in tqdm(batch_data):
-                retried = 0
-                request_data = form_request(batch, model_name, **config)
-                if "davinci" in type:
-                    while True:
-                        try:
-                            response = openai.Completion.create(**request_data)
-                            response = [r["text"] for r in response["choices"]]
-                            break
-                        except Exception as e:
-                            print("retring...", e)
-                            second = extract_seconds(str(e), retried)
-                            retried += 1
-                            time.sleep(second)
+        return _query_gemini_direct(data, config, task)
+
+
+def _query_key_manager(data, config, task):
+    """
+    Query using Key Manager endpoint
+    """
+    key_manager_url = config.get("api_base", "http://localhost:7749")
+    endpoint = f"{key_manager_url}/generate"
+    
+    hypos = []
+    
+    if isinstance(data, list):
+        for d in tqdm(data):
+            try:
+                request_data = form_request(d, **_get_generation_config(config))
+                response = requests.post(
+                    endpoint,
+                    json=request_data,
+                    headers={"Content-Type": "application/json"}
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    text = result["candidates"][0]["content"]["parts"][0]["text"]
+                    hypos.append(text.strip())
+                elif response.status_code == 429:
+                    print("Key Manager error: All keys rate limited")
+                    time.sleep(60)
+                    hypos.append("")
                 else:
-                    response = []
-                    for d in batch:
-                        request_data = form_request(d, type, **config)
-                        while True:
-                            try:
-                                result = openai.ChatCompletion.create(**request_data)
-                                result = result["choices"][0]["message"]["content"]
-                                response.append(result)
-                                break
-                            except Exception as e:
-                                print("retring...", e)
-                                second = extract_seconds(str(e), retried)
-                                retried += 1
-                                time.sleep(second)
+                    print(f"Key Manager error: {response.status_code} - {response.text}")
+                    hypos.append("")
+            except Exception as e:
+                print("Key Manager exception:", e)
+                time.sleep(5)
+                hypos.append("")
+    else:
+        try:
+            request_data = form_request(data, **_get_generation_config(config))
+            response = requests.post(
+                endpoint,
+                json=request_data,
+                headers={"Content-Type": "application/json"}
+            )
+            if response.status_code == 200:
+                result = response.json()
+                hypos = result["candidates"][0]["content"]["parts"][0]["text"].strip()
+            elif response.status_code == 429:
+                print("Key Manager error: All keys rate limited")
+                time.sleep(60)
+                hypos = ""
+            else:
+                print(f"Key Manager error: {response.status_code} - {response.text}")
+                hypos = ""
+        except Exception as e:
+            print("Key Manager exception:", e)
+            hypos = ""
+    
+    return hypos
 
-            results = [str(r).strip().split("\n\n")[0] if task else str(r).strip() for r in response]
-            hypos.extend(results)
-        else:
-            retried = 0
-            while True:
-                try:
-                    if "turbo" in type or "gpt4" in type:
-                        request_data = form_request(data, type, **config)
-                        response = openai.ChatCompletion.create(**request_data)
-                        result = response["choices"][0]["message"]["content"]
-                        break
-                    else:
-                        request_data = form_request(data, type=type, **config)
-                        response = openai.Completion.create(**request_data)["choices"][0]["text"]
-                        result = response.strip()
-                    break
-                except Exception as e:
-                    print("retring...", e)
-                    second = extract_seconds(str(e), retried)
-                    retried += 1
-                    time.sleep(second)
-            if task:
-                result = result.split("\n\n")[0]
-            hypos = result
 
-        return hypos
+def _query_gemini_direct(data, config, task):
+    """
+    Query using Gemini API directly
+    """
+    model_name = config.get("model", "gemini-2.0-flash")
+    model = genai.GenerativeModel(model_name)
+    
+    hypos = []
+    gen_config = _get_generation_config(config)
+    
+    # Extract generationConfig if present
+    generation_config = gen_config.pop("generationConfig", {})
+    tools = gen_config.pop("tools", None)
+    safety_settings = gen_config.pop("safetySettings", None)
+    
+    if isinstance(data, list):
+        for d in tqdm(data):
+            try:
+                kwargs = {}
+                if generation_config:
+                    kwargs["generation_config"] = generation_config
+                if tools:
+                    kwargs["tools"] = tools
+                if safety_settings:
+                    kwargs["safety_settings"] = safety_settings
+                
+                resp = model.generate_content(d, **kwargs)
+                hypos.append(resp.text.strip())
+            except Exception as e:
+                print("Gemini error:", e)
+                time.sleep(5)
+                hypos.append("")
+    else:
+        try:
+            kwargs = {}
+            if generation_config:
+                kwargs["generation_config"] = generation_config
+            if tools:
+                kwargs["tools"] = tools
+            if safety_settings:
+                kwargs["safety_settings"] = safety_settings
+            
+            resp = model.generate_content(data, **kwargs)
+            hypos = resp.text.strip()
+        except Exception as e:
+            print("Gemini error:", e)
+            hypos = ""
+    
+    return hypos
+
+
+def _get_generation_config(config):
+    """
+    Extract Gemini API compatible configuration
+    """
+    gen_config = {}
+    
+    if "generationConfig" in config:
+        gen_config["generationConfig"] = config["generationConfig"]
+    else:
+        # Default generation config
+        gen_config["generationConfig"] = {
+            "temperature": config.get("temperature", 0.7),
+            "maxOutputTokens": config.get("max_tokens", 1000)
+        }
+    
+    if "tools" in config:
+        gen_config["tools"] = config["tools"]
+    
+    if "safetySettings" in config:
+        gen_config["safetySettings"] = config["safetySettings"]
+    
+    return gen_config
+
 
 
 def paraphrase(sentence, client, type, **kwargs):
@@ -270,7 +223,7 @@ def paraphrase(sentence, client, type, **kwargs):
 
 if __name__ == "__main__":
     llm_client = None
-    llm_type = 'gemini'  # or 'gpt4o'
+    llm_type = 'gemini'
     start = time.time()
 
     data = [

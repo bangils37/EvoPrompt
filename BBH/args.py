@@ -34,7 +34,7 @@ def parse_args():
         "--sel_mode", type=str, choices=["wheel", "random", "tour"], default="wheel", help='selection strategy for parents, only used for GA'
     )
 
-    parser.add_argument('--llm_type', type=str, default='davinci')
+    parser.add_argument('--llm_type', type=str, default='gemini')
     parser.add_argument('--initial', type=str, default='cot', choices=['cot', 'desc', 'all', 'ckpt'], help='the stylf of the prompt, cot (task agnostic): Let\'s think step by step., desc (task specific): the description of the task', )
     parser.add_argument('--initial_mode', type=str)
     parser.add_argument('--ratio', type=float, default=0)

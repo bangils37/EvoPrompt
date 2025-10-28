@@ -16,9 +16,14 @@ def evolution(args, llm_config, client):
     set_seed(args.seed)
 
     task_data = json.load(open("data/%s.json" % task))["examples"]
+    
+    # Extract first 3 examples for few-shot learning
+    few_shot_examples = task_data[:3]
+    
     dev_data = random.sample(task_data, args.sample_num)
     test_data = [i for i in task_data if i not in dev_data]
-    model = "turbo" if "turbo" in args.llm_type else "davinci"
+    # Use the llm_type string directly so non-OpenAI models like 'gemini' are handled
+    model = args.llm_type
     task_prompt = open("lib_prompt/%s.txt" % task, "r").read()
 
     logger = setup_log(os.path.join(out_path, f"evol.log"))
@@ -33,6 +38,7 @@ def evolution(args, llm_config, client):
         model_index=model,
         logger=logger,
         demon=args.demon,
+        few_shot_examples=few_shot_examples,
         **llm_config,
     )
 

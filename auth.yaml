@@ -21,3 +21,23 @@ gpt4:
     api_key: 
     api_version: 
     engine:
+openai:
+  default:
+    api_key: 
+gpt4o:
+  default:
+    api_type: azure
+    api_base: 
+    api_key: 
+    api_version: 2025-01-01-preview
+    engine: gpt-4o
+    model: gpt-4o
+gemini:
+  default:
+    api_type: gemini
+    api_base: http://localhost:7749
+    use_key_manager: true
+    # api_key: 
+    # api_version: 
+    engine: gemma-3-12b-it
+    model: gemma-3-12b-it

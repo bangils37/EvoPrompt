@@ -241,6 +241,43 @@ class Evoluter:
     def evolute(self):
         raise NotImplementedError
 
+    def augment_with_explanation(self, prompt):
+        """
+        Bước mới: Lấy ngẫu nhiên một mẫu question-answer từ dev-set,
+        yêu cầu LLM cung cấp lời giải thích, rồi kết hợp vào prompt
+        """
+        # Lấy ngẫu nhiên một sample từ dev_data
+        sample = random.choice(self.dev_data)
+        question = sample['input']
+        answer = sample['target']
+        
+        # Tạo prompt yêu cầu LLM giải thích
+        explanation_request = f"""Given this question and answer, provide a brief explanation of the reasoning process:
+
+Question: {question}
+Answer: {answer}
+
+Please provide a clear and concise explanation of how to arrive at this answer."""
+        
+        # Gọi LLM để lấy explanation
+        try:
+            explanation = llm_query(
+                client=self.client,
+                data=explanation_request,
+                type=self.args.llm_type,
+                task=False,
+                temperature=0.5,
+                **self.llm_config,
+            )
+            self.logger.info(f"Generated explanation: {explanation}")
+            
+            # Kết hợp explanation vào prompt
+            augmented_prompt = f"{prompt}\n\nExample reasoning: {explanation}"
+            return augmented_prompt
+        except Exception as e:
+            self.logger.warning(f"Failed to generate explanation: {e}")
+            return prompt
+
     def test(self, step):
         self.logger.info(f"----------testing step {step} population----------")
         pop_marks = [self.prompts2mark[i] for i in self.population]
@@ -345,14 +382,19 @@ class DEEvoluter(Evoluter):
                 de_prompt = get_final_prompt(de_prompt)
                 logger.info(f"de prompt: {de_prompt}")
 
-                de_eval_res = self.eval_func(cot_prompt=de_prompt)
+                # Bước 4 (NEW): Augment với explanation từ dev-set
+                logger.info("Bước 4: Augmenting with explanation from dev-set")
+                de_prompt_augmented = self.augment_with_explanation(de_prompt)
+                logger.info(f"augmented prompt: {de_prompt_augmented}")
+                
+                de_eval_res = self.eval_func(cot_prompt=de_prompt_augmented)
                 logger.info(f"de_score: {de_eval_res}")
-                self.prompts2mark[de_prompt] = "evoluted"
-                cur_candidates[de_prompt] = {
+                self.prompts2mark[de_prompt_augmented] = "evoluted+explained"
+                cur_candidates[de_prompt_augmented] = {
                     "score": de_eval_res,
-                    "mark": self.prompts2mark[de_prompt],
+                    "mark": self.prompts2mark[de_prompt_augmented],
                 }
-                self.evaluated_prompts[de_prompt] = de_eval_res
+                self.evaluated_prompts[de_prompt_augmented] = de_eval_res
 
                 selected_prompt = max(
                     cur_candidates, key=lambda x: cur_candidates[x]["score"]
@@ -451,18 +493,23 @@ class GAEvoluter(Evoluter):
                 child_prompt = get_final_prompt(child_prompt)
                 logger.info(f"child prompt: {child_prompt}")
 
-                de_eval_res = self.eval_func(cot_prompt=child_prompt)
-                logger.info(f"new score: {de_eval_res}")
-                self.prompts2mark[child_prompt] = "evoluted"
+                # Bước 2 (NEW): Augment với explanation từ dev-set
+                logger.info("Bước 2: Augmenting with explanation from dev-set")
+                child_prompt_augmented = self.augment_with_explanation(child_prompt)
+                logger.info(f"augmented child prompt: {child_prompt_augmented}")
 
-                self.evaluated_prompts[child_prompt] = de_eval_res
+                de_eval_res = self.eval_func(cot_prompt=child_prompt_augmented)
+                logger.info(f"new score: {de_eval_res}")
+                self.prompts2mark[child_prompt_augmented] = "evoluted+explained"
+
+                self.evaluated_prompts[child_prompt_augmented] = de_eval_res
                 if args.ga_mode == "std":
-                    selected_prompt = child_prompt
+                    selected_prompt = child_prompt_augmented
                     selected_score = de_eval_res
                     self.population[j] = selected_prompt
 
                 elif args.ga_mode == "topk":
-                    selected_prompt = child_prompt
+                    selected_prompt = child_prompt_augmented
                     selected_score = de_eval_res
 
                 new_pop.append(selected_prompt)

@@ -13,18 +13,23 @@ if __name__ == "__main__":
     set_seed(args.seed)
 
     client = None
-    llm_config = llm_init(f"../auth.yaml", args.llm_type, args.setting)
+    llm_config = llm_init(f"auth.yaml", args.llm_type, args.setting)
 
     out_path = args.output
     logger = setup_log(os.path.join(out_path, f"eval.log"))
     logger.info("\n\t" + "\n\t".join(f"{k} = {v}" for k, v in vars(args).items()))
     logger.info("=" * 50)
 
-    task_data = json.load(open("data/%s.json" % task))["examples"]
+    task_data = json.load(open("BBH/data/%s.json" % task))["examples"]
+    
+    # Extract first 3 examples for few-shot learning
+    few_shot_examples = task_data[:3]
+    
     dev_data = random.sample(task_data, args.sample_num)
     test_data = [i for i in task_data if i not in dev_data]
-    model = "turbo" if "turbo" in args.llm_type else "davinci"
-    task_prompt = open("lib_prompt/%s.txt" % task, "r").read()
+    # Use the llm_type directly so non-OpenAI models like 'gemini' are supported
+    model = args.llm_type
+    task_prompt = open("BBH/lib_prompt/%s.txt" % task, "r").read()
     prompts = [args.content]
     with open(os.path.join(args.output, "acc.txt"), "a+") as f:
         for p in prompts:
@@ -37,6 +42,7 @@ if __name__ == "__main__":
                 model_index=model,
                 logger=logger,
                 demon=args.demon,
+                few_shot_examples=few_shot_examples,
                 **llm_config,
             )
             dev_acc = eval_task(
@@ -48,6 +54,7 @@ if __name__ == "__main__":
                 model_index=model,
                 logger=logger,
                 demon=args.demon,
+                few_shot_examples=few_shot_examples,
                 **llm_config,
             )
 
